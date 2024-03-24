@@ -1,3 +1,4 @@
+from numpy import inner
 import torch
 import torchvision
 from torch import nn
@@ -8,7 +9,7 @@ from utils import prepare_data
 from sklearn.metrics import accuracy_score
 
 
-def goodness_score(pos_acts, neg_acts, threshold=2):
+def goodness_score(pos_acts, neg_acts, threshold=4):
     """
     Compute the goodness score for a given set of positive and negative activations.
 
@@ -62,12 +63,12 @@ class FF_Layer(nn.Linear):
     def forward(self, input):
         input = super().forward(input)
         input = self.ln_layer(input.detach())
-        return input
+        return nn.functional.relu(input)
 
 
 class Unsupervised_FF(nn.Module):
     def __init__(self, n_layers: int = 4, n_neurons=2000, input_size: int = 28 * 28, n_epochs: int = 100,
-                 bias: bool = True, n_classes: int = 10, n_hid_to_log: int = 3, device=torch.device("cuda:0")):
+                 bias: bool = True, n_classes: int = 10, n_hid_to_log: int = 3, device=torch.device("mps")):
         super().__init__()
         self.n_hid_to_log = n_hid_to_log
         self.n_epochs = n_epochs
@@ -133,6 +134,25 @@ class Unsupervised_FF(nn.Module):
         logits = self.last_layer(concat_output)
         return logits.squeeze()
 
+    def encoding(self, image: torch.Tensor):
+        image = image.to(self.device)
+        image = torch.reshape(image, (image.shape[0], 1, -1))
+        concat_output = []
+        for idx, layer in enumerate(self.ff_layers):
+            image = layer(image)
+            if idx > len(self.ff_layers) - self.n_hid_to_log - 1:
+                concat_output.append(image)
+        return torch.concat(concat_output, 2)
+
+    def evaluate_encoding(self, dataloader: DataLoader):
+        self.eval()
+        dataloader.batch_size = 1
+        inner_tqdm = tqdm(dataloader, desc=f"Evaluating model", leave=False, position=1)
+        all_encodings = []
+        for image, labels in inner_tqdm:
+            image = image[0].to(self.device)
+            all_encodings.append(self.encoding(image).detach().cpu())
+
     def evaluate(self, dataloader: DataLoader, dataset_type: str = "train"):
         self.eval()
         inner_tqdm = tqdm(dataloader, desc=f"Evaluating model", leave=False, position=1)
@@ -190,7 +210,7 @@ if __name__ == '__main__':
     # Create the data loader
     test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=True, num_workers=4)
 
-    device = torch.device("cuda:0")
+    device = torch.device("cpu")
     unsupervised_ff = Unsupervised_FF(device=device, n_epochs=2)
 
     loss = train(unsupervised_ff, pos_dataloader, neg_dataloader)
