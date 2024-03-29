@@ -9,7 +9,7 @@ from utils import prepare_data
 from sklearn.metrics import accuracy_score
 
 
-def goodness_score(pos_acts, neg_acts, threshold=1):
+def goodness_score(pos_acts, neg_acts, threshold=2):
     """
     Compute the goodness score for a given set of positive and negative activations.
 
@@ -26,10 +26,12 @@ def goodness_score(pos_acts, neg_acts, threshold=1):
     quantity but without the threshold subtraction
     """
 
-    pos_goodness = -torch.sigmoid(torch.sum(torch.pow(pos_acts, 2)) + threshold)
-    neg_goodness = torch.sigmoid(torch.sum(torch.pow(neg_acts, 2)) - threshold)
-    norm_ratio = torch.norm(pos_acts, dim=0, p=1)/torch.norm(pos_acts, dim=0, p=2)
-    return torch.add(pos_goodness, neg_goodness)#+torch.std(pos_acts)+torch.std(neg_acts)
+    pos_goodness = torch.sigmoid(torch.sum(torch.pow(pos_acts, 2)) + threshold)
+    neg_goodness = -torch.sigmoid(torch.sum(torch.pow(neg_acts, 2)) - threshold)
+    sparsity = lambda h: (h.shape[2]**.5-(torch.norm(h, dim=2, p=1)/torch.norm(h, dim=2, p=2)))/(h.shape[2]**.5-1)
+    pos_sparsity = -(torch.sigmoid(torch.sum(sparsity(pos_acts)) + threshold))
+    neg_sparsity = torch.sigmoid(torch.sum(sparsity(neg_acts)) - threshold)
+    return torch.add(pos_goodness, neg_goodness)#+torch.add(pos_sparsity, neg_sparsity)
 
 
 def get_metrics(preds, labels):
@@ -63,7 +65,6 @@ class FF_Layer(nn.Linear):
 
     def forward(self, input):
         input = super().forward(input)
-        input = self.ln_layer(input.detach())
         return nn.functional.relu(input)
 
 
@@ -102,8 +103,8 @@ class Unsupervised_FF(nn.Module):
                     pos_acts = layer(pos_acts)
                     neg_acts = layer(neg_acts)
                     layer.ff_train(pos_acts, neg_acts)
-                    # pos_acts = layer.ln_layer(pos_acts.detach())
-                    # neg_acts = layer.ln_layer(neg_acts.detach())
+                    pos_acts = layer.ln_layer(pos_acts.detach())
+                    neg_acts = layer.ln_layer(neg_acts.detach())
 
     def train_last_layer(self, dataloader: DataLoader):
         num_examples = len(dataloader)
