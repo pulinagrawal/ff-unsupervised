@@ -26,8 +26,8 @@ def goodness_score(pos_acts, neg_acts, threshold=2):
     quantity but without the threshold subtraction
     """
 
-    pos_goodness = torch.sigmoid(torch.sum(torch.pow(pos_acts, 2)) + threshold)
-    neg_goodness = -torch.sigmoid(torch.sum(torch.pow(neg_acts, 2)) - threshold)
+    pos_goodness = -torch.sigmoid(torch.sum(torch.pow(pos_acts, 2)) + threshold)
+    neg_goodness = torch.sigmoid(torch.sum(torch.pow(neg_acts, 2)) - threshold)
     sparsity = lambda h: (h.shape[2]**.5-(torch.norm(h, dim=2, p=1)/torch.norm(h, dim=2, p=2)))/(h.shape[2]**.5-1)
     pos_sparsity = -(torch.sigmoid(torch.sum(sparsity(pos_acts)) + threshold))
     neg_sparsity = torch.sigmoid(torch.sum(sparsity(neg_acts)) - threshold)
